@@ -1,4 +1,8 @@
 #include "systemcalls.h"
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -14,10 +18,19 @@ bool do_system(const char *cmd)
  * TODO  add your code here
  *  Call the system() function with the command set in the cmd
  *   and return a boolean true if the system() call completed with success
- *   or false() if it returned a failure
+ *   or false if it returned a failure
 */
 
-    return true;
+    int return_code = system(cmd);
+
+    if(return_code == 0)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 /**
@@ -58,10 +71,49 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    int wait_status;
 
-    va_end(args);
+    int pid = fork();
 
-    return true;
+    if(pid == 0)
+    {
+        // Child Process
+
+        int exec_command = execv(command[0], command);
+    
+        if(exec_command == -1)
+        {
+            printf("`execv` command `%s` failed!\n", command[0]);
+        }
+
+        exit(1);
+    }
+    else if(pid == -1)
+    {
+        printf("Failed to make child process!\n");
+
+        wait(NULL);
+
+        return false;
+    }
+    else
+    {
+        wait(&wait_status);
+
+        int wait_exit_status = WEXITSTATUS(wait_status);
+
+        va_end(args);
+
+        if(wait_exit_status == 0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+
+    }
 }
 
 /**
@@ -87,13 +139,71 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 
 /*
  * TODO
- *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a refernce,
+ *   Call execv, but first using https://stackoverflow.com/a/13784315/1446624 as a reference,
  *   redirect standard out to a file specified by outputfile.
  *   The rest of the behaviour is same as do_exec()
  *
 */
+    int fd = open(outputfile, O_WRONLY|O_TRUNC|O_CREAT, 0644);
 
-    va_end(args);
+    if(fd < 0)
+    {
+        perror("open"); 
+        exit(1); 
+    }
 
-    return true;
+    int wait_status;
+
+    int pid = fork();
+
+    if(pid == 0)
+    {
+        // Child Process
+
+        int file_dupe = dup2(fd, 1);
+
+        if(file_dupe < 0)
+        {
+            perror("dup2");
+            exit(1);
+        }
+
+        close(fd);
+
+        int exec_command = execv(command[0], command);
+    
+        if(exec_command == -1)
+        {
+            perror("execv");
+        }
+
+        exit(1);
+    }
+    else if(pid == -1)
+    {
+        perror("fork");
+
+        wait(NULL);
+
+        return false;
+    }
+    else
+    {
+        wait(&wait_status);
+
+        int wait_exit_status = WEXITSTATUS(wait_status);
+
+        va_end(args);
+        close(fd);
+
+        if(wait_exit_status == 0)
+        {
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+
+    }
 }
